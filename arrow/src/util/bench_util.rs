@@ -17,6 +17,8 @@
 
 //! Utils to make benchmarking easier
 
+use std::sync::Arc;
+use uuid::Uuid;
 use crate::array::*;
 use crate::datatypes::*;
 use crate::util::test_util::seedable_rng;
@@ -144,6 +146,31 @@ pub fn create_string_dict_array<K: ArrowDictionaryKeyType>(
         .collect();
 
     data.iter().map(|x| x.as_deref()).collect()
+}
+
+
+pub fn create_string_dict_array_low_cardinality(size: i32) -> DictionaryArray<Int32Type> {
+    let values = StringArray::from_iter_values(["a", "b", "c"]);
+    let mut keys_vector = Vec::new();
+    for _ in 1..=size {
+        keys_vector.push(rand::thread_rng().gen_range(0..=2));
+    }
+    let keys = Int32Array::from(keys_vector);
+    DictionaryArray::<Int32Type>::try_new(keys, Arc::new(values)).unwrap()
+}
+
+pub fn create_string_dict_array_high_cardinality(size: i32) -> DictionaryArray<Int32Type> {
+    let mut values_vector = Vec::new();
+    for _i in 1..=size {
+        values_vector.push(String::from(Uuid::new_v4().to_string()));
+    }
+    let values = StringArray::from(values_vector);
+    let mut keys_vector: Vec<i32> = Vec::new();
+    for _ in 1..=size {
+        keys_vector.push(rand::thread_rng().gen_range(0..size));
+    }
+    let keys = Int32Array::from(keys_vector);
+    DictionaryArray::<Int32Type>::try_new(keys, Arc::new(values)).unwrap()
 }
 
 /// Create primitive run array for given logical and physical array lengths

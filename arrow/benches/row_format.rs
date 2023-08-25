@@ -23,10 +23,11 @@ use arrow::array::ArrayRef;
 use arrow::datatypes::{Int64Type, UInt64Type};
 use arrow::row::{RowConverter, SortField};
 use arrow::util::bench_util::{
-    create_primitive_array, create_string_array_with_len, create_string_dict_array,
+    create_primitive_array, create_string_array_with_len, create_string_dict_array, create_string_dict_array_low_cardinality, create_string_dict_array_high_cardinality,
 };
 use arrow_array::types::Int32Type;
 use arrow_array::Array;
+use arrow_row::{CardinalityAwareRowConverter, Row};
 use criterion::{black_box, Criterion};
 use std::sync::Arc;
 
@@ -51,16 +52,16 @@ fn do_bench(
         });
     });
 
-    let mut converter = RowConverter::new(fields).unwrap();
-    let rows = converter.convert_columns(&cols).unwrap();
-    // using a pre-prepared row converter should be faster than the first time
-    c.bench_function(&format!("convert_columns_prepared {name}"), |b| {
-        b.iter(|| black_box(converter.convert_columns(&cols).unwrap()));
-    });
+    // let mut converter = RowConverter::new(fields).unwrap();
+    // let rows = converter.convert_columns(&cols).unwrap();
+    // // using a pre-prepared row converter should be faster than the first time
+    // c.bench_function(&format!("convert_columns_prepared {name}"), |b| {
+    //     b.iter(|| black_box(converter.convert_columns(&cols).unwrap()));
+    // });
 
-    c.bench_function(&format!("convert_rows {name}"), |b| {
-        b.iter(|| black_box(converter.convert_rows(&rows).unwrap()));
-    });
+    // c.bench_function(&format!("convert_rows {name}"), |b| {
+    //     b.iter(|| black_box(converter.convert_rows(&rows).unwrap()));
+    // });
 }
 
 fn row_bench(c: &mut Criterion) {
@@ -119,14 +120,41 @@ fn row_bench(c: &mut Criterion) {
         false,
     );
 
+    // low cardinality dict fields
     let cols = vec![
-        Arc::new(create_string_dict_array::<Int32Type>(4096, 0.5, 20)) as ArrayRef,
-        Arc::new(create_string_dict_array::<Int32Type>(4096, 0., 30)) as ArrayRef,
-        Arc::new(create_string_dict_array::<Int32Type>(4096, 0., 100)) as ArrayRef,
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
         Arc::new(create_primitive_array::<Int64Type>(4096, 0.)) as ArrayRef,
     ];
-    do_bench(c, "4096 4096 string_dictionary(20, 0.5), string_dictionary(30, 0), string_dictionary(100, 0), i64(0)", cols, false);
+    do_bench(c, "row_conv_low_card_preserve", cols, true);
+
+    let cols = vec![
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_low_cardinality(4096)) as ArrayRef,
+        Arc::new(create_primitive_array::<Int64Type>(4096, 0.)) as ArrayRef,
+    ];
+    do_bench(c, "row_conv_low_card_no_preserve", cols, false);
+
+    // high cardinality dict fields
+    let cols = vec![
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_primitive_array::<Int64Type>(4096, 0.)) as ArrayRef,
+    ];
+    do_bench(c, "row_conv_high_card_preserve", cols, true);
+
+    let cols = vec![
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_string_dict_array_high_cardinality(4096)) as ArrayRef,
+        Arc::new(create_primitive_array::<Int64Type>(4096, 0.)) as ArrayRef,
+    ];
+    do_bench(c, "row_conv_high_card_no_preserve", cols, false);
 }
+
 
 criterion_group!(benches, row_bench);
 criterion_main!(benches);
