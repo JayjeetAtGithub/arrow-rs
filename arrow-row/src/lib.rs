@@ -1459,33 +1459,33 @@ const LOW_CARDINALITY_THRESHOLD: usize = 10;
 
 #[derive(Debug)]
 pub struct CardinalityAwareRowConverter {
-    inner: RowConverter,
-    done: bool,
+    fields: Option<Vec<SortField>>,
+    inner: Option<RowConverter>,
 }
 
 impl CardinalityAwareRowConverter {
     pub fn new(fields: Vec<SortField>) -> Result<Self, ArrowError> {
         Ok(Self {
-            inner: RowConverter::new(fields)?,
-            done: false,
+            fields: Some(fields),
+            inner: None,
         })
     }
-
+    
     pub fn size(&self) -> usize {
-        self.inner.size()
+        return self.inner.as_ref().unwrap().size();
     }
-
+    
     pub fn convert_rows(&self, rows: &Rows) -> Result<Vec<ArrayRef>, ArrowError> {
-        self.inner.convert_rows(rows)
+        return self.inner.as_ref().unwrap().convert_rows(rows);
     }
 
     pub fn convert_columns(
         &mut self,
         columns: &[ArrayRef]) -> Result<Rows, ArrowError> {
-        if !self.done {
+        if self.fields != None {
+            let mut updated_fields = self.fields.take();
             for (i, col) in columns.iter().enumerate() {
                 if let DataType::Dictionary(k, _) = col.data_type() {
-                    // let cardinality = col.as_any().downcast_ref::<DictionaryArray<Int32Type>>().unwrap().values().len();
                     let cardinality = match k.as_ref() {
                         DataType::Int8 => downcast_dict!(col, Int32Type).values().len(),
                         DataType::Int16 => downcast_dict!(col, Int32Type).values().len(),
@@ -1496,17 +1496,14 @@ impl CardinalityAwareRowConverter {
                         DataType::UInt64 => downcast_dict!(col, UInt64Type).values().len(),
                         _ => unreachable!(),
                     };
-
                     if cardinality >= LOW_CARDINALITY_THRESHOLD {
-                        let mut sort_field = self.inner.fields[i].clone();
-                        sort_field.preserve_dictionaries = false; 
-                        self.inner.codecs[i] = Codec::new(&sort_field).unwrap();
+                        updated_fields.as_mut().unwrap()[i] = updated_fields.as_ref().unwrap()[i].clone().preserve_dictionaries(false);
                     }
                 }
             }
+            self.inner = Some(RowConverter::new(updated_fields.unwrap())?);
         }
-        self.done = true;
-        self.inner.convert_columns(columns)
+        self.inner.as_mut().unwrap().convert_columns(columns)
     }
 }
 
