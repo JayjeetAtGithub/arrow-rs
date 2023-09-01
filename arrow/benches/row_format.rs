@@ -47,7 +47,7 @@ fn do_bench(
 
     c.bench_function(&format!("convert_columns {name}"), |b| {
         b.iter(|| {
-            let mut converter = RowConverter::new(fields.clone()).unwrap();
+            let mut converter = CardinalityAwareRowConverter::new(fields.clone()).unwrap();
             black_box(converter.convert_columns(&cols).unwrap())
         });
     });
